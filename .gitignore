@@ -1,0 +1,4 @@
+.env
+.venv/
+merchantAssistantAI.pdf
+__pycache__
