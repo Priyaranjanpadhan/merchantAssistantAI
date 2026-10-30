@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from redis import Redis
 from rq import Queue
 from worker import process_tickets
+import json
 
 app = FastAPI()
 
@@ -12,10 +13,6 @@ redis_conn = Redis(host="localhost", port=6379)
 
 # Create a queue named support_tickets
 ticket_queue = Queue("support_tickets", connection=redis_conn)
-
-@app.get("/")
-def base():
-    return {"name": "priyaranjan"}
 
 # Let's say a merchant is making a request saying hey, payment provider(let's say Razorpay) a payment of 500rs got stuck. Please help. 
 # When they hit submit, razorpay frontend sends a POST request to FastAPI backend. The payload includes their unique merchant_id and their issue_text. 
@@ -32,3 +29,19 @@ async def generate_ticket(ticket: TicketRequest):
     job = ticket_queue.enqueue(process_tickets, unique_id, ticket.merchant_id, ticket.issue_text)
     return {"ticket_id": unique_id, "status": "queued", "merchant": ticket.merchant_id}
 
+@app.get("/api/tickets/{ticket_id}")
+async def get_ticket_status(ticket_id: str):
+    # ask redis if a finished result exists for this ticket_id
+    saved_data = redis_conn.get(f"result:{ticket_id}")
+
+    # If saved data is none, the worker is still processing it
+    if saved_data is None:
+        return {"ticket_id" : ticket_id, "status": "processing"}
+
+    # if it exists, convert the JSON string into a pythong dictionary and return it
+    result_dict = json.loads(saved_data)
+    return{
+        "ticket_id": ticket_id,
+        "status": "Completed",
+        "data": result_dict
+    }

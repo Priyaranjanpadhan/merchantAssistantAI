@@ -5,9 +5,22 @@ import os
 from langgraph.graph import StateGraph, START, END
 
 load_dotenv()
-os.environ["GOOGLE_API_KEY"] = os.getenv("GEMINI_API_KEY")
+# it's not needed as we already have the load_dotenv, init_chat_model can fetch from the .env file/
+# os.environ["GOOGLE_API_KEY"] = os.getenv("GEMINI_API_KEY")
 
-model = init_chat_model("google_genai:gemini-3.7-flash")
+# as the error is 503, it's temporary and not a bug in code so need to fix it gracefully.
+# In production backend engineering, the graceful way to handle 503/504 errors on a flagship LLM is MODEL FALLBACK(.with_fallbacks())
+primary_model = init_chat_model(
+    "google_genai:gemini-3.8-flash",
+    timeout=15,
+    max_retries = 1                        
+)
+backup_model = init_chat_model(
+    "google_genai:gemini-3.5-flash-lite",
+    timeout=15,
+    max_retries=1
+)
+model = primary_model.with_fallbacks([backup_model])
 
 class TicketState(TypedDict):
     ticket_id : str
@@ -38,9 +51,10 @@ def router_node(state: TicketState):
     # we need to call gemini, model.invoke() is langchain function which will convert our entire prompt model query into a proper backend structure and 
     # make api call to gemini and also it will accept the gemini response and show it to us, that's why langchain is so helpful.
     response = model.invoke(prompt)
+    # print(response)
 
     # write the result into the 'category' slot of ticketState.
-    return {"category": response.content.strip()}
+    return {"category": response.content[0]["text"].strip()}
 
 # now we need to change the resolution node, for resolution node, we need to have two resoltion one is BILLING and another one is TECHNICAL. so according to that we will change it.
 def billing_node(state: TicketState):
@@ -57,7 +71,8 @@ def billing_node(state: TicketState):
     )
 
     response = model.invoke(prompt)
-    return{"resolution": response.content.strip()}
+    # print(response)
+    return{"resolution": response.content[0]["text"].strip()}
 
 def tech_node(state: TicketState):
     issue = state["issue_text"]
@@ -73,7 +88,8 @@ def tech_node(state: TicketState):
     )
 
     response = model.invoke(prompt)
-    return{"resolution": response.content.strip()}
+    # print(response)
+    return{"resolution": response.content[0]["text"].strip()}
 
 # conditional edge logic: either biiling_node or tech_node
 def router_decision(state: TicketState):
@@ -102,3 +118,13 @@ builder.add_edge("tech_node", END)
 
 # Compile the graph into an executable agent.
 support_agent = builder.compile() # we can export this support_agent to other files.
+
+if __name__ == "__main__":
+    test_ticket = {
+        "ticket_id": "test-101",
+        "merchant_id": "gyana",
+        "issue_text": "payment server is down."
+    }
+    result = support_agent.invoke(test_ticket)
+    print("CATEGORY: ", result["category"])
+    print("RESOLUTION: ", result["resolution"])
