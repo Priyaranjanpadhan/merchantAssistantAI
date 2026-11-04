@@ -15,7 +15,8 @@ def process_tickets(ticket_id: str, merchant_id: str, issue_text: str):
 
     # save result into redis as a json style not the dictionary.
     # we saved it, so that we can use this to display in the main terminal, when the main terminal asks for this key, is it ready, if it is ready we will send it and if not we will make them wait.
-    redis_conn.set(f"result:{ticket_id}", json.dumps(result))
+    # we are putting a 1-hour safety expiration, if the client didn't fetch during that time, we will delete the data so memory leak can't happen.
+    redis_conn.set(f"result:{ticket_id}", json.dumps(result), ex=3600)
 
     # print(f"Ticket {ticket_id} resolved under category: {result['category']}")
 

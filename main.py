@@ -31,8 +31,9 @@ async def generate_ticket(ticket: TicketRequest):
 
 @app.get("/api/tickets/{ticket_id}")
 async def get_ticket_status(ticket_id: str):
+    key = f"result:{ticket_id}" # you might think that why result: is used but when we used multiple things in redis and maybe other thing has same keyid, so to know which database it belongs to we use this column method so we know which key it is.
     # ask redis if a finished result exists for this ticket_id
-    saved_data = redis_conn.get(f"result:{ticket_id}")
+    saved_data = redis_conn.get(key)
 
     # If saved data is none, the worker is still processing it
     if saved_data is None:
@@ -40,8 +41,14 @@ async def get_ticket_status(ticket_id: str):
 
     # if it exists, convert the JSON string into a pythong dictionary and return it
     result_dict = json.loads(saved_data)
+
+    # Delete from Redis RAM now that we have retrieved it!
+    redis_conn.delete(key)
     return{
         "ticket_id": ticket_id,
-        "status": "Completed",
-        "data": result_dict
+        "status": "completed",
+        "merchant_id": result_dict["merchant_id"],
+        "category": result_dict["category"],
+        "issue_text": result_dict["issue_text"],
+        "resolution": result_dict["resolution"]
     }
