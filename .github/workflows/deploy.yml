@@ -1,0 +1,60 @@
+name: MerchantAssist CI/CD Pipeline
+
+# Trigger this pipeline automatically on every push to the 'main' branch
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  # Job 1: Continuous Integration (Verify Docker Build in the Cloud)
+  build-and-test:
+    runs-on: ubuntu-latest # runs on temporary virtual Linux computer provided for free by GitHub(run-on: ubuntu-latest). It's sole purpose is to test if your compiles and if docker can build it successfully.
+    steps:
+      - name: 1. Checkout repository code
+        uses: actions/checkout@v4 # prebuilt github action. It clones code repo onto GitHub's memory virtual machines so the runner has access to Dockerfile and python scripts.
+
+      - name: 2. Create dummy .env for build verification
+        run: echo "GEMINI_API_KEY=dummy_key_for_ci" > .env # because .env file is hidden, so github creates a .env folder so that Docker build doesn't crash looking for an API key.
+
+      - name: 3. Build and boot containers to verify health
+        run: |
+          docker compose build
+          docker compose up -d # Docker CLI commands, just boots up the docker container with these commands.
+          sleep 5
+          docket compose ps
+          # it pings FastAPI documentation page inside the container. If fastapi started up correctly, it will return a 200 status code. If it crashed exit 1, forces the entire github actions pipeline to fail immediately, stopping broken code from reaching production.
+          curl -f http://localhost:8000/docs || exit 1
+          docket compose down # Shuts up the container.
+
+  # Job 2: Continuous Deployment (Ship to AWS EC2 via SSH)
+  deploy-to-aws:
+    needs: build-and-test # It tells github "Don't toch AWS unless job 1 passes 100% successfully." If step 1 borken, step 2 is skipped completely.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy latest containers to AWS EC2
+        uses: appleboy/ssh-action@v1.0.3 # Github actions that allows GitHub to securely log into private AWS EC2 server using an SSH key. 
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: | 
+            # 1. This checks if the project folder already exists on AWS. If it's the first deployment, it clones repository using exact repo name(merchantAssistantAI). On future deployments, it just grabs the latest codes.
+            if [ ! -d "merchantAssistantAI" ]; then
+              git clone https://github.com/${{ github.repository }}.git merchantAssistantAI
+              fi
+              cd merchantAssistantAI
+              git pull origin main
+
+            # 2. Write the production GEMINI_API_KEY from github secrets into .env on EC2
+            echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
+
+            # 3. Rebuild and restart the containers in detached mode (-d) in the background
+            sudo docket compose up -d --build
+
+            # 4. Clean up old unused Docker images so the EC2 disk never fills up
+            sudo docker image prune -f
+
+# .env, safely writes real secret API key from GitHub secrets into a production .env file on AWS server.
+# -d, rebuilds the live containers in the background.
+# prune -f(deletes old cached Docker images), so AWS hard drive never fills up. 
