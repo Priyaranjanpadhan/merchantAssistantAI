@@ -22,10 +22,10 @@ jobs:
           docker compose build
           docker compose up -d # Docker CLI commands, just boots up the docker container with these commands.
           sleep 5
-          docket compose ps
+          docker compose ps
           # it pings FastAPI documentation page inside the container. If fastapi started up correctly, it will return a 200 status code. If it crashed exit 1, forces the entire github actions pipeline to fail immediately, stopping broken code from reaching production.
           curl -f http://localhost:8000/docs || exit 1
-          docket compose down # Shuts up the container.
+          docker compose down # Shuts up the container.
 
   # Job 2: Continuous Deployment (Ship to AWS EC2 via SSH)
   deploy-to-aws:
@@ -50,7 +50,7 @@ jobs:
             echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
 
             # 3. Rebuild and restart the containers in detached mode (-d) in the background
-            sudo docket compose up -d --build
+            sudo docker compose up -d --build
 
             # 4. Clean up old unused Docker images so the EC2 disk never fills up
             sudo docker image prune -f
