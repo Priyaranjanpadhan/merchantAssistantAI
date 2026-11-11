@@ -1,0 +1,37 @@
+services:
+  # service 1: The Redis Broker
+  redis:
+    image: redis:7-alpine
+    container_name: merchantassistai_redis
+    ports:
+      - "6379:6379"
+  
+  # Service 2: The FastAPI Web server
+  api:
+    build: .
+    container_name: merchantassistai_api
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - REDIS_HOST=redis
+    depends_on:
+      - redis
+
+  # Service 3: The background RQ worker (uses the exact same dockerfile image)
+  worker:
+    build: .
+    container_name: merchantassistai_worker
+    command: rq worker support_tickets
+    env_file:
+      - .env
+    environment:
+      - REDIS_HOST=redis
+    depends_on:
+      - redis
+
+# when we type docker compose up --build.
+# Docker packages everything in your current folder, sends the context into the Docket daemon, 
+# reads your dockerfile, installs your requirements.txt, and creates a brand-new custom image specifically for backend.
