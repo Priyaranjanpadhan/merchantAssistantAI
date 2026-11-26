@@ -1,4 +1,4 @@
-from agent import support_agent
+from app.agent import support_agent
 import json
 from redis import Redis
 import os

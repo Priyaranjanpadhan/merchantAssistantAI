@@ -4,7 +4,7 @@ from uuid import uuid4
 from pydantic import BaseModel
 from redis import Redis
 from rq import Queue
-from worker import process_tickets
+from app.worker import process_tickets
 import json
 import os
 
