@@ -5,17 +5,15 @@ from pydantic import BaseModel
 from redis import Redis
 from rq import Queue
 from app.worker import process_tickets
+from app.config import settings
 import json
-import os
 
 app = FastAPI(title="MerchantAssist AI Backend", version="1.0.0")
 
-# Reads REDIS_HOST from Docker environment, or falls back to localhost
-redis_host = os.getenv("REDIS_HOST", "localhost")
-redis_conn = Redis(host=redis_host, port=6379)
+redis_conn = Redis(host=settings.redis_host, port=settings.redis_port)
 
 # Create a queue named support_tickets
-ticket_queue = Queue("support_tickets", connection=redis_conn)
+ticket_queue = Queue(settings.queue_name, connection=redis_conn)
 
 # Let's say a merchant is making a request saying hey, payment provider(let's say Razorpay) a payment of 500rs got stuck. Please help. 
 # When they hit submit, razorpay frontend sends a POST request to FastAPI backend. The payload includes their unique merchant_id and their issue_text. 

@@ -3,6 +3,7 @@ from langchain.chat_models import init_chat_model
 from typing import TypedDict
 import os
 from langgraph.graph import StateGraph, START, END
+from app.config import settings
 
 load_dotenv()
 # it's not needed as we already have the load_dotenv, init_chat_model can fetch from the .env file/
@@ -11,14 +12,14 @@ load_dotenv()
 # as the error is 503, it's temporary and not a bug in code so need to fix it gracefully.
 # In production backend engineering, the graceful way to handle 503/504 errors on a flagship LLM is MODEL FALLBACK(.with_fallbacks())
 primary_model = init_chat_model(
-    "google_genai:gemini-3.8-flash",
-    timeout=15,
-    max_retries = 1                        
+    settings.primary_model,
+    timeout=settings.llm_timeout,
+    max_retries = settings.llm_max_retries                        
 )
 backup_model = init_chat_model(
-    "google_genai:gemini-3.5-flash-lite",
-    timeout=15,
-    max_retries=1
+    settings.backup_model,
+    timeout=settings.llm_timeout,
+    max_retries=settings.llm_max_retries
 )
 model = primary_model.with_fallbacks([backup_model])
 
