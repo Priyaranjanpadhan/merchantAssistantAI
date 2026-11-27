@@ -2,7 +2,7 @@
 FROM python:3.12-slim
 
 # 2. Prevent Python from buffering stdout/stderr (so logs show up in real-time in Docker/AWS)
-ENV PYTHONBUFFERED=1
+ENV PYTHONUNBUFFERED=1
 
 # 3. Creates a folder named /app inside that Linux container and moves inside it(like running cd /app). 
 WORKDIR /app
@@ -22,4 +22,8 @@ COPY . .
 # By default, if a web server binds to 127.0.0.1(localhost), it only listens to traffic originating from inside itself.
 # If device let's say visits 127.0.0.1:8000, it will move to mac's network and not container.
 # By telling Uvicorn to host on 0.0.0.0, you tell the server: "Listen to all network interfaces". This allows from mac browser to cross the container boundary and reach FastAPI app.
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# app.main:app because main file is int app folder and :app is the server.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+#8. Added python path
+ENV PYTHONPATH=/app

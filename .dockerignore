@@ -3,4 +3,4 @@ __pycache__
 *.__pyc
 .env
 .git
-*.pdf
+**/*.pdf
