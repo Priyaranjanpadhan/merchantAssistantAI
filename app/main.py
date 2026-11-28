@@ -1,19 +1,19 @@
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, Depends, Body
 from typing import Annotated
 from uuid import uuid4
 from pydantic import BaseModel
 from redis import Redis
 from rq import Queue
-from app.worker import process_tickets
-from app.config import settings
 import json
+
+from app.worker import process_tickets, get_redis_conn
+from app.config import settings
 
 app = FastAPI(title="MerchantAssist AI Backend", version="1.0.0")
 
-redis_conn = Redis(host=settings.redis_host, port=settings.redis_port)
-
-# Create a queue named support_tickets
-ticket_queue = Queue(settings.queue_name, connection=redis_conn)
+def get_ticket_queue(redis_conn: Annotated[Redis, Depends(get_redis_conn)]) -> Queue:
+    """FastAPI dependency that builds the RQ queue using the injected Redis client."""
+    return Queue(settings.queue_name, connection=redis_conn)
 
 # Let's say a merchant is making a request saying hey, payment provider(let's say Razorpay) a payment of 500rs got stuck. Please help. 
 # When they hit submit, razorpay frontend sends a POST request to FastAPI backend. The payload includes their unique merchant_id and their issue_text. 
@@ -57,7 +57,8 @@ async def generate_ticket(
                     }
                 }
             )
-        ]
+        ],
+        ticket_queue: Annotated[Queue, Depends(get_ticket_queue)]
     ):
     # Generate a fresh ID every time a request hits this endpoint.
     unique_id = str(uuid4())
@@ -67,7 +68,10 @@ async def generate_ticket(
     return {"ticket_id": unique_id, "status": "queued", "merchant": ticket.merchant_id}
 
 @app.get("/api/tickets/{ticket_id}")
-async def get_ticket_status(ticket_id: str):
+async def get_ticket_status(
+    ticket_id: str,
+    redis_conn: Annotated[Redis, Depends(get_redis_conn)] # redis_conn is just a variable name. Redis the data type what type of object it is. Depends(get_redis_conn) the instruction for fastapi call the function and put it's return value in redis conn. 
+):
     key = f"result:{ticket_id}" # you might think that why result: is used but when we used multiple things in redis and maybe other thing has same keyid, so to know which database it belongs to we use this column method so we know which key it is.
     # ask redis if a finished result exists for this ticket_id
     saved_data = redis_conn.get(key)
@@ -78,7 +82,6 @@ async def get_ticket_status(ticket_id: str):
 
     # if it exists, convert the JSON string into a python dictionary and return it
     result_dict = json.loads(saved_data)
-
     # Delete from Redis RAM now that we have retrieved it!
     redis_conn.delete(key)
     return{
